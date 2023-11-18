@@ -1,4 +1,5 @@
 import json
+import warnings
 
 
 class CustomException:
@@ -16,6 +17,5 @@ class CustomException:
         try:
             add_msg = self._msg_dict[msg_name]
         except KeyError:
-            # TODO: raise exception "KEY NOT FOUND"!
-            pass
+            warnings.warn(f"Key '{msg_name}' not found")
         return type(exception)(str(add_msg) + str(exception))

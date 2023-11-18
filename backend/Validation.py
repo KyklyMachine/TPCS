@@ -140,9 +140,15 @@ class ModelValidator:
 
 if __name__ == "__main__":
     m = ModelValidator()
+
     x = np.array([1, 2, 1, 2, 3])
     y = np.array([1, 2, 1, 3, 3])
     m.set_data({0, 1, 2, 3, 4, 5}, x, y)
+
     print(m.get_err())
+
+
+
+
 
 
