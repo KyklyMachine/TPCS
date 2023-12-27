@@ -1,1 +1,5 @@
-scikit-learng
+scikit-learn
+extra_streamlit_components
+streamlit_modal
+streamlit_extras
+plotly_express
