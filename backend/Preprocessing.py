@@ -1,7 +1,7 @@
 import numpy as np
 from sklearn import model_selection
 from sklearn import preprocessing
-from CustomException import CustomException
+from backend.CustomException import CustomException
 
 
 MSG_PATH = "MSG_CONSTANT.json"
@@ -26,11 +26,11 @@ class CVRatio:
 
 
 class DataPreprocessor:
-    _cv_method: model_selection
-    _preprocessing_method: preprocessing
+    _cv_method = None
+    _preprocessing_method = None
     _cv_ratio: CVRatio
 
-    def __init__(self, preprocessing_method: preprocessing, cv_ratio: list):
+    def __init__(self, preprocessing_method, cv_ratio: list):
         if len(cv_ratio) != 4:
             raise CustomException(MSG_PATH).update_exception(ValueError(), "CV_RATIO_LIST_LEN_ERROR")
         self.set_preprocessing_method(preprocessing_method)
@@ -41,19 +41,26 @@ class DataPreprocessor:
         self._cv_ratio = CVRatio(test, val, train, help)
 
     def get_cv_ratio(self):
-        return self._cv_ratio.get_ratio()
+        return self._cv_ratio
 
-    def set_preprocessing_method(self, method: preprocessing):
+    def set_preprocessing_method(self, method):
         self._preprocessing_method = method
 
-    def get_preprocessing_method(self, method: preprocessing):
+    def get_preprocessing_method(self, method):
         return self._preprocessing_method
 
-    def set_cv_method(self, method: model_selection):
+    def set_cv_method(self, method):
         self._cv_method = method
 
-    def get_cv_method(self, method: model_selection):
+    def get_cv_method(self, method):
         return self._cv_method
+
+    def get_need_marked_exemplars(self):
+        test = int(1 / self._cv_ratio.test + 1)
+        val = int(1 / self._cv_ratio.val + 1)
+        train = int(1 / self._cv_ratio.train + 1)
+        help = int(1 / self._cv_ratio.help + 1)
+        return test + val + train + help
 
     def cv_data(self, x: np.array, y: np.array):
         # сначала выделим данные под help

@@ -7,13 +7,13 @@ from LinearModels import LogisticRegression
 from sklearn import preprocessing
 
 
-class PostLabeler:
+class Labeler:
     pass
 
 
 if __name__ == "__main__":
     # get data and transform to np.array (DataManipulator)
-    dm = DataManipulator("imgs")
+    dm = DataManipulator()
     dm.transform_file_to_df(compress_images=True)
     _x = dm.get_df()["data"].to_numpy()
     x = np.array([img for img in _x])

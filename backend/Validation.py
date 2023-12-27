@@ -1,5 +1,5 @@
 import numpy as np
-from CustomException import CustomException
+from backend.CustomException import CustomException
 from sklearn import metrics
 
 

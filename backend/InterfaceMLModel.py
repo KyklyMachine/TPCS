@@ -1,7 +1,7 @@
 import numpy as np
 from abc import abstractmethod, ABC
 import pickle
-from CustomException import CustomException
+from backend.CustomException import CustomException
 
 MSG_PATH = "MSG_CONSTANT.json"
 

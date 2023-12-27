@@ -1,7 +1,7 @@
 import numpy as np
 from sklearn import linear_model
-from InterfaceMLModel import IMLModel
-from CustomException import CustomException
+from backend.InterfaceMLModel import IMLModel
+from backend.CustomException import CustomException
 
 MSG_PATH = "MSG_CONSTANT.json"
 

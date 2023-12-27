@@ -1,0 +1,10 @@
+div.st-emotion-cache-r421ms.e1f1d6gn0 div:has(div.all-images-container){
+    height:460px;
+    overflow-y: scroll;
+    overflow-x: hidden
+}
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+}
+
