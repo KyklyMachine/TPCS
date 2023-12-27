@@ -97,21 +97,10 @@ class DataPreprocessor:
         res = np.concatenate([data_r, data_g, data_b]).reshape(3, -1).transpose().reshape(n_samples, -1, 3)
         return res
 
-    def preprocess_data(self, data, fit_preprocessor=True, reshape_to_2d=True):
-        r = data[:, :, 0]
-        g = data[:, :, 1]
-        b = data[:, :, 2]
-
+    def preprocess_data(self, data, fit_preprocessor=True):
         if fit_preprocessor:
-            self._preprocessing_method.fit(np.concatenate([r, g, b]))
-        r_transform = self._preprocessing_method.transform(r)
-        g_transform = self._preprocessing_method.transform(g)
-        b_transform = self._preprocessing_method.transform(b)
-
-        res_data = self.union_rgb(r_transform, g_transform, b_transform, data.shape[0])
-        if reshape_to_2d:
-            return self.reshape_data(res_data)
-        return res_data
+            self._preprocessing_method.fit(data)
+        return self._preprocessing_method.transform(data)
 
     def reshape_data(self, data: np.array):
         return data.reshape(data.shape[0], -1)

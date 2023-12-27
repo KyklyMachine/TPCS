@@ -1,4 +1,3 @@
-import sys
 import numpy as np
 import streamlit as st
 import pandas as pd
@@ -11,14 +10,13 @@ import sklearn as skl
 import extra_streamlit_components as stx
 import zipfile
 from streamlit_modal import Modal
-from plotly.subplots import make_subplots
-import plotly.graph_objects as go
 import plotly.express as px
 from streamlit_extras.stylable_container import stylable_container
 
 
 CV_RATIO=[0.25, 0.25, 0.25, 0.25]
 MIN_IMG_PER_CLASS = 20
+TODO = 1
 
 
 st.set_page_config(layout="wide")
@@ -28,6 +26,8 @@ with open("styles.css") as f:
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 # STATE MANIPULATION
+        
+
 def add_acc(acc: float):
     if "acc" not in st.session_state:
         st.session_state["acc"] = []
@@ -108,11 +108,11 @@ def show_images_to_labeling(files, dm, pr, img_per_row):
         pictures_container(im_to_show, files, img_per_row)
     
 
-def show_images_to_postlabeling(files, dm, pr, img_per_row):
+def show_images_to_postlabeling(files, dm, pr, img_per_row, image_to_show):
     if files:
         # TODO: 0:100??? нужно добавить перелистывание страниц  
-        im_to_show = dm.get_images_to_label()[0:100]
-        pictures_container(im_to_show, files, img_per_row)
+        image_to_show = image_to_show[:100]
+        pictures_container(image_to_show, files, img_per_row)
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
@@ -130,7 +130,6 @@ def get_nlabeled_per_class():
 
 
 def labeling_left_panel(dm: DataManipulator):
-
     
     classes = list(dm.get_classes())
     classes.remove("unlabeled")
@@ -152,13 +151,11 @@ def labeling_left_panel(dm: DataManipulator):
     
     return class_marked
 
-def postlabeling_left_panel(dm: DataManipulator):
-    #classes = list(dm.get_classes())
-    #classes.remove("unlabeled")
-    classes = list(dm.get_classes())[0]
-    classes = sorted(classes) # type: ignore
-    class_marked = st.radio("Класс для доразметки", classes)
-    return class_marked
+
+def postlabeling_left_panel(dm: DataManipulator, class_to_postlabeling):
+    st.radio("Класс для доразметки", [class_to_postlabeling])
+    return class_to_postlabeling
+
 
 def markup_images(img_class, dm: DataManipulator):
     # get all buttons (and img) that has True in session_state
@@ -198,7 +195,7 @@ def dataset_marking_page(files, dm, pr: DataPreprocessor, preprocessing, ml_mode
                         "1. Вам нужно будет указать класс, для которого проводится разметка. \n" +
                         "2. Выбрать изображения, которые на ваш взгляд относятся к выбранному классу. \n" + 
                         "3. Нажать на кнопку Разметить. \n" +
-                        "4. Продолжать разметку до тех пор, пока не будут размечены все изображения.")
+                        "4. Продолжать разметку до тех пор, пока не будет размечено требуемое количество изображений.")
 
     df = dm.get_df()
     col1, col2 = st.columns([1, 5])
@@ -214,8 +211,50 @@ def dataset_marking_page(files, dm, pr: DataPreprocessor, preprocessing, ml_mode
             st.rerun()
 
 
-
 def dataset_addmarking_page(files, dm, pr, preprocessing, ml_model, cv, priority, img_per_row):
+
+    if "preprocessed" not in st.session_state:
+        st.session_state["preprocessed"] = False
+        df = dm.get_df()
+        df = df[df["class"] != "unlabeled"]
+        df = df.to_numpy()
+        x = df[:,3]
+        x = np.array([np.array(xi) for xi in x])
+        y = np.array(df[:,1])
+        [[x_train, y_train], [x_val, y_val], [x_test, y_test], [x_help, y_help]] = pr.cv_data(x, y)
+
+        x_train = pr.preprocess_data(x_train, fit_preprocessor=True)
+        x_val = pr.preprocess_data(x_train, fit_preprocessor=False)
+        x_test = pr.preprocess_data(x_train, fit_preprocessor=False)
+        x_help = pr.preprocess_data(x_train, fit_preprocessor=False)
+
+        model = ml_model()
+        model.fit(x_train, y_train) 
+        y_pred = model.predict(x_test)
+        mv = ModelValidator(set([]), y_test, y_pred)
+        
+        j_folder, i_class, cost0 = dm.get_images_to_postlabel(ml_model, x_train, y_train, x_test, y_test, x_help, y_help, priority, TODO)
+        
+        
+        # get images
+        df = dm.get_df()
+        df = df[df["class"] == "unlabeled"]
+        df = df.to_numpy()
+        x = df[:,3]
+        x = np.array([np.array(xi) for xi in x])
+        names = df[:,2].tolist()
+        
+        classes = list(dm.get_classes())
+        classes.remove("unlabeled")
+
+        img_names_to_show = dm.get_i_folders(model, x, names, classes[j_folder])
+
+        st.session_state["preprocessed"] = True
+        st.session_state["img_names_to_show"] = img_names_to_show
+        st.session_state["class_to_postlabeling"] = classes[i_class]
+
+
+
     modal = Modal(
         "Информация о доразметке", 
         key="demo-modal",
@@ -234,56 +273,85 @@ def dataset_addmarking_page(files, dm, pr, preprocessing, ml_model, cv, priority
     if modal.is_open():
         with modal.container():
             st.write("На данном экране Вам предлагается провести самостоятельную доразметку датасета. \n" +
-                        "1. Выберите изображения, которые на ваш взгляд относятся к предоставленному классу. \n" + 
+                        "1. Выберите изображения, которые на ваш взгляд относятся к предоставленному классу " + 
+                        "(таких изображений может и не юыть). \n" + 
                         "2. Нажмите на кнопку Доразметить. \n" +
-                        "3. Вы попадете на страницу с результатами доразметки.")
+                        "Для просмотра результатов итерации перейдите на страницу 'Результаты'")
 
     
     col1, col2 = st.columns([1, 5])
     with col1:
-        class_marked = postlabeling_left_panel(dm)
+        class_marked = postlabeling_left_panel(dm, st.session_state["class_to_postlabeling"])
     with col2:
-        show_images_to_postlabeling(files, dm, pr, img_per_row)
+        show_images_to_postlabeling(files, dm, pr, img_per_row, st.session_state["img_names_to_show"])
     button_cols = st.columns(3)
 
     with button_cols[1]:
         markup_button = st.button("Доразметить", use_container_width=True)
         if markup_button:
             markup_images(class_marked, dm)
+            df = dm.get_df()
+            df = df[df["class"] != "unlabeled"]
+            df = df.to_numpy()
+            x = df[:,3]
+            x = np.array([np.array(xi) for xi in x])
+            y = np.array(df[:,1])
+            [[x_train, y_train], [x_val, y_val], [x_test, y_test], [x_help, y_help]] = pr.cv_data(x, y)
+            st.write(len(x_train), len(x_val), len(x_test), len(x_help))
+            x_train = pr.preprocess_data(x_train, fit_preprocessor=True)
+            x_val = pr.preprocess_data(x_train, fit_preprocessor=False)
+            x_test = pr.preprocess_data(x_train, fit_preprocessor=False)
+            x_help = pr.preprocess_data(x_train, fit_preprocessor=False)
+            st.write(len(x_train), len(x_val), len(x_test), len(x_help))
+
+            model = ml_model()
+            model.fit(np.concatenate([x_train, x_val, x_help]), np.concatenate([y_train, y_val, y_help])) 
+            y_pred = model.predict(x_test)
+            mv = ModelValidator(set([]), y_test, y_pred)
+            add_acc(mv.get_acc())
+            add_n_postlabeled(x.shape[0])
+
+            if "preprocessed" in st.session_state:
+                st.session_state.pop("preprocessed")
+            if "img_names_to_show" in st.session_state:
+                st.session_state.pop("img_names_to_show")
+            if "class_to_postlabeling" in st.session_state:
+                st.session_state.pop("class_to_postlabeling")
+
             st.rerun()
-    
+
 
 def results_page(file, dm, pr, preprocessing, ml_model, cv, priority, img_per_row):
-    modal = Modal(
-        "Информация о доразметке", 
-        key="demo-modal",
-        padding=20,
-        max_width=744
-        )
-    
-    col1, col2 = st.columns([8, 1])
-    with col1:
-        st.header("Результаты доразметки")
-    with col2:
-        open_modal = st.button("Помощь")
 
-    if open_modal:
-        modal.open()
-    if modal.is_open():
-        with modal.container():
-            st.write("На данном экране Вам предлагается провести самостоятельную доразметку датасета. \n" +
-                        "1. Выберите изображения, которые на ваш взгляд относятся к предоставленному классу. \n" + 
-                        "2. Нажмите на кнопку Доразметить. \n" +
-                        "3. Вы попадете на страницу с результатами доразметки.")
+    st.header("Результаты доразметки")
 
     cols = st.columns([1, 3])
     with cols[0]:
         with st.container(border=True):
-            st.metric("Текущая точность", 0.25, 0.01)
+            if "acc" in st.session_state:
+                now = st.session_state["acc"][-1]
+                if len(st.session_state["acc"]) > 1:
+                    delta = now - st.session_state["acc"][-2]
+                    st.metric("Текущая точность", now, delta)
+                else:
+                    st.metric("Текущая точность", now, "–", "off")
+            else:
+                st.metric("Текущая точность", "–", "–", "off")
         with st.container(border=True):
-            st.metric("Количество размеченных данных", 42442, 102)
+            if "n_postlabeled" in st.session_state:
+                now = st.session_state["n_postlabeled"][-1]
+                if len(st.session_state["n_postlabeled"]) > 1:
+                    delta = now - st.session_state["n_postlabeled"][-2]
+                    st.metric("Количество размеченных данных", now, delta)
+                else:
+                    st.metric("Количество размеченных данных", now, "–", "off")
+            else:
+                st.metric("Количество размеченных данных", "–", "–", "off")
     with cols[1]:
-        plot_acc_count([0.23, 0.55, 0.59], [10, 22, 25])
+        if ("acc" in st.session_state) and ("n_postlabeled" in st.session_state):
+            plot_acc_count(st.session_state["acc"], st.session_state["n_postlabeled"])
+        else:
+            plot_acc_count([], [])
 
 
 
@@ -306,27 +374,6 @@ def results_page(file, dm, pr, preprocessing, ml_model, cv, priority, img_per_ro
                 st.rerun()
 
 
-def result_after_labeling(file, dm, pr, preprocessing, ml_model, cv, priority):
-    st.header("Результаты разметки")
-
-    button_cols = st.columns(5)
-    with button_cols[0]:
-        bt_prev = st.button("Назад", use_container_width=True)
-        if bt_prev:
-            if st.session_state["stage"] != 1:
-                st.session_state["stage"] -= 1
-                st.rerun()
-
-    with button_cols[4]:
-        bt_next = st.button("Далее", use_container_width=True)
-        if bt_next:
-            if st.session_state["stage"] != 5:
-                st.session_state["stage"] += 1
-                st.rerun()
-            else:
-                st.session_state["stage"] = 1
-                st.rerun()
-
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 # DATA LOADING
 
@@ -340,6 +387,10 @@ def load_file(files):
 
 def sidebar():
     with st.sidebar:
+        # TODO: add a menu
+        #selected = option_menu("Меню", ["Настройки алгоритма", 'Настройки графики'], 
+        #icons=['wrench', 'gear'], menu_icon="cast", default_index=1)
+
         # file loading
         file = st.file_uploader("Загрузите .zip архив")
         data_manipulator = load_file(file)
@@ -350,8 +401,7 @@ def sidebar():
         # preprocessing
         # TODO: Add VGG16
         preprocessing_dict = {
-            "Нормализация": skl.preprocessing.StandardScaler, 
-            "Масштабирование": skl.preprocessing.normalize, 
+            "Масштабирование": skl.preprocessing.MinMaxScaler, 
         }
         preprocessing = st.selectbox("Выберите алгоритм предобработки", 
                                      preprocessing_dict.keys(),
@@ -386,7 +436,7 @@ def sidebar():
         cv_res = cv_dict[cv] # type: ignore
 
         if file:
-            st.download_button("Скачать доразмеченный датасет", file)
+            st.download_button("Скачать доразмеченный датасет", file, disabled=True)
 
         data_preprocessor = DataPreprocessor(preprocessing_method=preprocessing_res(), cv_ratio=CV_RATIO)
 
@@ -414,10 +464,12 @@ def page_loader(file, dm, pr, preprocessing, ml_model, cv, priority, pages_dict:
         if st.session_state["stage"] == page_key:
             pages_dict[page_key](file, dm, pr, preprocessing, ml_model, cv, priority, img_per_row)
 
+
 if __name__ == "__main__":
+    
     # sidebar with params
-    file, dm, preprocessing, ml_model, cv, priority, img_per_row = sidebar()
-                
+    with st.spinner('Загрузка страницы...'):
+        file, dm, preprocessing, ml_model, cv, priority, img_per_row = sidebar()
 
     # check is dataset loaded
     if file:
@@ -428,10 +480,9 @@ if __name__ == "__main__":
             pr = DataPreprocessor(preprocessing_method=skl.preprocessing.StandardScaler(), cv_ratio=[0.25, 0.25, 0.25, 0.25])
             min_marked_exemplars = pr.get_need_marked_exemplars()
             count_marked_exemplars = dm.get_marked_img_count()
-            #st.write(dm.get_marked_img_count(), pr.get_need_marked_exemplars())
             nlabeled_per_class = get_nlabeled_per_class()
             nlabeled_per_class.pop("unlabeled")
-            enought_to_postlabeling = all([cls > MIN_IMG_PER_CLASS for cls in nlabeled_per_class.values()])
+            enought_to_postlabeling = all([cls >= MIN_IMG_PER_CLASS for cls in nlabeled_per_class.values()])
             if not enought_to_postlabeling:
                 pages = {
                     1: "Разметка датасета",
@@ -462,5 +513,5 @@ if __name__ == "__main__":
                 Поддерживаются архивы формата .zip, внутри должны находиться изображения в папках,
                 которые названы как классы изображений. Неразмеченные изображения должны находиться
                 в папке unlabeled.""")
-        pass
+        
 

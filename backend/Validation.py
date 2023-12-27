@@ -15,10 +15,11 @@ class ModelValidator:
         self.set_data(classes, y_real, y_pred)
 
     def set_data(self, classes: set, y_real: np.array, y_pred: np.array) -> None:
-        if len(y_real) != len(y_real):
+        if len(y_real) != len(y_pred):
+            print(len(y_real), len(y_pred))
             raise (CustomException(MSG_PATH).update_exception(ValueError(), "YREAL_YPRED_SHAPE_ERROR"))
-        if set(y_real.tolist() + y_pred.tolist()).difference(classes):
-            raise (CustomException(MSG_PATH).update_exception(ValueError(), "YREAL_YPRED_CLASSES_ERROR"))
+        """if set(y_real.tolist() + y_pred.tolist()).difference(classes):
+            raise (CustomException(MSG_PATH).update_exception(ValueError(), "YREAL_YPRED_CLASSES_ERROR"))"""
         self.y_real = y_real
         self.y_pred = y_pred
         self.classes = classes

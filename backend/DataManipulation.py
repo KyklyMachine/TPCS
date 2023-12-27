@@ -215,105 +215,114 @@ class DataManipulator:
 
 
 
+    
 
 
+    
 
 
+    
 
 
+    def get_images_to_postlabel(self, model_start, x_labeled, y_labeled, x_test, y_test, x_helper, y_helper, alpha, number_markedup_ex):
+        
+        def Gini(folder, class_, cm, classes):
+            cm_folder = np.array([])
+            for i in range(len(classes)):
+                cm_folder = np.append(cm_folder, cm[i][folder])
+            cm_folder_norm = cm_folder/sum(cm_folder)
+            cm_folder_norm_del = np.delete(cm_folder_norm, class_)
+            return 1-sum(cm_folder_norm_del**2)
 
+        def choose_data_for_markup(x_labeled, y_labeled, classes, number_markedup_ex):
+            costs, score = [], []
+            acc0 = accuracy_score(y_test, model.predict(x_test))
+            N_ = len(y_helper)
 
+            for j in range(K):
+                for i in range(K):
+                    #массивы (размерностью от 0 до number_markedup_ex) примеров из j папки i класса, которые будут добавлены на данном шаге.
+                    x_ji, y_ji = get_example_from_folder_and_class(x_helper, y_helper, j, i, model, number_markedup_ex, classes)
 
-    def get_images_to_postlabel(self, model_start: backend.InterfaceMLModel.IMLModel, x_labeled, y_labeled, x_test, y_test, x_helper, y_helper, alpha, number_markedup_ex):
+                    N_ji = len(y_ji)
+                    c_ji = cost(j, i, classes, model, x_test, y_test) #стоимость доразметки одного примера
+                    costs.append(c_ji)
+
+                    if N_ji > 0: #иначе в обучающий набор не добавится ничего нового
+                        #обучаем модель на объединенных данных
+                        model_U_ji = model_start()
+                        model_U_ji.fit(np.concatenate((x_labeled, x_ji)), np.concatenate((y_labeled, y_ji)))
+                        score.append(get_score(accuracy_score(y_test, model_U_ji.predict(x_test)), c_ji * N_ji / N_, alpha))
+                        #print('x_ji', x_ji, 'y_ji', y_ji)
+                    else:
+                        score.append(get_score(acc0, c_ji / N_, alpha)) #не домножаем на N_ji т.к. оно равно нулю, но стоимость не нулевая
+            #Находим оптимальные примеры для доразметки
+            index_score_min = None
+            try:
+                index_score_min = np.reshape(np.where(score == np.min(score))[0], (-1))[0]
+            except:
+                index_score_min = 0
+            print(index_score_min)
+            cost0 = costs[index_score_min]
+            i_class = index_score_min % K
+            j_folder = index_score_min // K
+            return j_folder, i_class, cost0
+        
+        def get_score(acc, cost, alpha):
+            return alpha*(1-acc) + (1 - alpha)*cost
+
+        def cost(j, i, classes, model_learned, x_test, y_test):
+            K = len(classes)
+            T = (K-2)/(K-1)
+            p_cm = confusion_matrix(y_test, model_learned.predict(x_test))
+            G = Gini(j,i,p_cm, classes)
+            p = confusion_matrix(y_test, model_learned.predict(x_test), normalize='pred')[i][j]
+            return (G**2 - p**2 - 2*p - p*(G**2) + 3)/((T**2)+3)
+
+        def get_example_from_folder_and_class(x_from, y_from, folder, class_, model, amount, classes):
+            y_pred = model.predict(x_from)
+            cm = confusion_matrix(y_from, y_pred)
+            x_out, y_out = [], []
+            #создать массив индексов всех подходящих под условие примеров, а затем выбрать из них рандомные в нужном количестве
+            i_arr = []
+            for i in range(len(y_from)):
+                if y_from[i] == classes[class_] and y_pred[i] == classes[folder]:
+                    i_arr.append(i)
+            #print(i_arr)
+            if i_arr:
+                i_arr = rnd.sample(i_arr, min(cm[class_][folder], amount, len(i_arr))) # type: ignore
+            #print(i_arr)
+            for k in i_arr:
+                x_out.append(x_from[k])
+                y_out.append(y_from[k])
+            return x_out, y_out
+
         if not self._df_info.empty:
-            model = copy.deepcopy(model_start)
+            model = model_start()
             model.fit(x_labeled, y_labeled)
-            classes = self.get_classes()
-
-            def get_example_from_folder_and_class(x_from, y_from, folder, class_, model, amount, classes):
-                y_pred = model.predict(x_from)
-                cm = confusion_matrix(y_from, y_pred)
-                x_out, y_out = [], []
-                #создать массив индексов всех подходящих под условие примеров, а затем выбрать из них рандомные в нужном количестве
-                i_arr = []
-                for i in range(len(y_from)):
-                    if y_from[i] == classes[class_] and y_pred[i] == classes[folder]:
-                        i_arr.append(i)
-                i_arr = rnd.sample(i_arr, min(cm[class_][folder], amount)) # type: ignore
-                for k in i_arr:
-                    x_out.append(x_from[k])
-                    y_out.append(y_from[k])
-                return x_out, y_out
-
-            def Gini(folder, class_, cm, classes):
-                cm_folder = np.array([])
-                for i in range(len(classes)):
-                    cm_folder = np.append(cm_folder, cm[i][folder])
-                cm_folder_norm = cm_folder/sum(cm_folder)
-                cm_folder_norm_del = np.delete(cm_folder_norm, class_)
-                return 1-sum(cm_folder_norm_del**2)
-
-                #2
-            def cost(j, i, classes):
-                p_cm = confusion_matrix(y_test, model.predict(x_test))
-                G=Gini(j,i,p_cm, classes)
-                p = confusion_matrix(y_test, model.predict(x_test), normalize='pred')[i][j]
-                # FIXME: Была T вместо последней G
-                return (G**2 - p**2 - 2*p - p*(G**2) + 3)/((G**2)+3)
-
-                #3
-            def get_score(acc, cost, alpha):
-                return alpha*(1-acc) + (1 - alpha)*cost #ошибка = 1-acc (уменьшаем ошибку и стоимость => ищем минимум этой функции)
-
-            def choose_data_for_markup(x_labeled, y_labeled, classes, number_markedup_ex):
-                costs, score = [], []
-                acc0 = accuracy_score(y_test, model.predict(x_test))
-                N_ = len(y_helper)
-
-                for j in range(len(classes)):
-                    for i in range(len(classes)):
-                        #массивы (размерностью от 0 до number_markedup_ex) примеров из j папки i класса, которые будут добавлены на данном шаге.
-                        x_ji, y_ji = get_example_from_folder_and_class(x_helper, y_helper, j, i, model, number_markedup_ex, classes)
-
-                        N_ji = len(y_ji)
-                        c_ji = cost(j, i, classes) #стоимость доразметки одного примера
-                        costs.append(c_ji)
-
-                        if N_ji > 0: #иначе в обучающий набор не добавится ничего нового
-                            #обучаем модель на объединенных данных
-                            model_U_ji = copy.deepcopy(model_start)
-                            model_U_ji.fit(np.concatenate((x_labeled, x_ji)), np.concatenate((y_labeled, y_ji)))
-                            score.append(get_score(accuracy_score(y_test, model_U_ji.predict(x_test)), c_ji * N_ji / N_, alpha))
-                            #print('x_ji', x_ji, 'y_ji', y_ji)
-                        else:
-                            score.append(get_score(acc0, c_ji / N_, alpha)) #не домножаем на N_ji т.к. оно равно нулю, но стоимость не нулевая
-                #Находим оптимальные примеры для доразметки
-                index_score_min = np.where(score == np.min(score))[0][0]
-                cost0 = costs[index_score_min]
-                i_class = index_score_min % len(classes)
-                j_folder = index_score_min // len(classes)
-                return j_folder, i_class, cost0
-
-            j_folder, i_class, cost0 = choose_data_for_markup(x_labeled, y_labeled, classes, number_markedup_ex)
-
-
-
-
-
-
-
-
-            return self._df_info[self._df_info["class"] == "unlabeled"]["name"]
+            classes = list(self.get_classes())
+            classes.remove("unlabeled")
+            K = len(classes)
+            T = (K-2)/(K-1)
+            return choose_data_for_markup(x_labeled, y_labeled, classes, number_markedup_ex)
         else:
             raise CustomException(MSG_PATH).update_exception(Exception(), "DATAFRAME_ERROR?")
 
 
+    def get_random_class(self):
+        return rnd.choice(list(self.get_classes()))
 
 
-if __name__ == "__main__":
-    # инициализация класса и выбор директории (TODO: попробуйте разные директории и их наполнение)
-    dm = DataManipulator("imgs")
+    def get_i_folders(self, learned_model, x_unlabeled, names_unlabeled, folder_class):
+        y_unlabeled = learned_model.predict(x_unlabeled)
+        res_names = []
+        for i in range(len(names_unlabeled)):
+            name_i = names_unlabeled[i]
+            class_i = y_unlabeled[i]
+            if class_i == folder_class:
+                res_names.append(name_i)
+        return res_names
 
-    # трансформация изображений в пиксели
-    dm.transform_file_to_df(compress_images=True)
-    dm.get_df()
+
+
+        
