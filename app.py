@@ -65,9 +65,9 @@ def picture_element(path: str, src):
         if path not in st.session_state:
             st.session_state[path] = False
         if not st.session_state[path]:
-            button = st.button("Выбрать", key="button-" + path, use_container_width=True, on_click=change_vis, kwargs={"name": path})
+            st.button("Выбрать", key="button-" + path, use_container_width=True, on_click=change_vis, kwargs={"name": path})
         if st.session_state[path]:
-            button = st.button("Убрать", key="button-" + path, use_container_width=True, type="primary", on_click=change_vis,
+            st.button("Убрать", key="button-" + path, use_container_width=True, type="primary", on_click=change_vis,
                                kwargs={"name": path})
 
 
@@ -77,10 +77,7 @@ def calculate_rows_count(n_pics, n_cols):
     return res
 
 
-def pictures_container(pictures, src, n_cols=3):
-        picture_container = st.container(border=True)
-        st.container()
-        
+def pictures_container(pictures, src, n_cols=3):        
         with zipfile.ZipFile(src) as dataset_zip:
             with stylable_container("images-container", 
                                     """
@@ -143,10 +140,8 @@ def labeling_left_panel(dm: DataManipulator):
         else:
             c.append(fr"{cls} :green[{count_cls}/{MIN_IMG_PER_CLASS}]")
     
-    #col1, col2 = st.columns(2)
-    #with col1:
     class_marked = st.radio("Выберите класс", classes)
-    #with col2:
+    
     st.markdown("  \n".join(c))
     
     return class_marked
@@ -167,11 +162,9 @@ def markup_images(img_class, dm: DataManipulator):
         df.loc[df["name"] == name, "class"] = img_class
         st.session_state.pop(name)
     
-    
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 # PAGES 
-
 
 def dataset_marking_page(files, dm, pr: DataPreprocessor, preprocessing, ml_model, cv, priority, img_per_row):
     modal = Modal(
@@ -223,10 +216,10 @@ def dataset_addmarking_page(files, dm, pr, preprocessing, ml_model, cv, priority
         y = np.array(df[:,1])
         [[x_train, y_train], [x_val, y_val], [x_test, y_test], [x_help, y_help]] = pr.cv_data(x, y)
 
-        x_train = pr.preprocess_data(x_train, fit_preprocessor=True)
-        x_val = pr.preprocess_data(x_train, fit_preprocessor=False)
-        x_test = pr.preprocess_data(x_train, fit_preprocessor=False)
-        x_help = pr.preprocess_data(x_train, fit_preprocessor=False)
+        x_train_pr = pr.preprocess_data(x_train, fit_preprocessor=True)
+        x_val_pr = pr.preprocess_data(x_train, fit_preprocessor=False)
+        x_test_pr = pr.preprocess_data(x_train, fit_preprocessor=False)
+        x_help_pr = pr.preprocess_data(x_train, fit_preprocessor=False)
 
         model = ml_model()
         model.fit(x_train, y_train) 
@@ -234,7 +227,6 @@ def dataset_addmarking_page(files, dm, pr, preprocessing, ml_model, cv, priority
         mv = ModelValidator(set([]), y_test, y_pred)
         
         j_folder, i_class, cost0 = dm.get_images_to_postlabel(ml_model, x_train, y_train, x_test, y_test, x_help, y_help, priority, TODO)
-        
         
         # get images
         df = dm.get_df()
@@ -297,12 +289,11 @@ def dataset_addmarking_page(files, dm, pr, preprocessing, ml_model, cv, priority
             x = np.array([np.array(xi) for xi in x])
             y = np.array(df[:,1])
             [[x_train, y_train], [x_val, y_val], [x_test, y_test], [x_help, y_help]] = pr.cv_data(x, y)
-            st.write(len(x_train), len(x_val), len(x_test), len(x_help))
-            x_train = pr.preprocess_data(x_train, fit_preprocessor=True)
-            x_val = pr.preprocess_data(x_train, fit_preprocessor=False)
-            x_test = pr.preprocess_data(x_train, fit_preprocessor=False)
-            x_help = pr.preprocess_data(x_train, fit_preprocessor=False)
-            st.write(len(x_train), len(x_val), len(x_test), len(x_help))
+            
+            x_train_pr = pr.preprocess_data(x_train, fit_preprocessor=True)
+            x_val_pr = pr.preprocess_data(x_train, fit_preprocessor=False)
+            x_test_pr = pr.preprocess_data(x_train, fit_preprocessor=False)
+            x_help_pr = pr.preprocess_data(x_train, fit_preprocessor=False)
 
             model = ml_model()
             model.fit(np.concatenate([x_train, x_val, x_help]), np.concatenate([y_train, y_val, y_help])) 
